@@ -35,6 +35,15 @@
   function play(card,source,season,episode){
     var query=args(card);query.source=source;query.season=season;query.episode=episode;
     request('/api/resolve',query,function(data){
+      if(data.iframeUrl){
+        var previous=state()[key(card)], progress=previous && previous.progress[season+':'+episode];
+        remember(card,source,season,episode,progress?progress.time:0,progress?progress.duration:0);
+        var box=$('<div></div>');
+        $('<div></div>').text('Внешний плеер. Серии и озвучка переключаются внутри него; прогресс с Lampa не синхронизируется. Назад — закрыть.').css({fontSize:'0.8em',marginBottom:'0.5em'}).appendTo(box);
+        $('<iframe></iframe>').attr({src:data.iframeUrl,allow:'autoplay; fullscreen; encrypted-media',allowfullscreen:'',referrerpolicy:'no-referrer',title:'AniPlay — внешний плеер'}).css({width:'100%',height:'70vh',border:0,background:'#000'}).appendTo(box);
+        function closeFrame(){box.find('iframe').attr('src','about:blank');Lampa.Modal.close();back();}
+        Lampa.Modal.open({title:'AniPlay · внешний плеер',html:box,size:'full',buttons:[{name:'Закрыть плеер',onSelect:closeFrame}],onBack:closeFrame});return;
+      }
       var saved=state()[key(card)], prior=saved && saved.progress[season+':'+episode];
       var time=prior?prior.time:0,duration=prior?prior.duration:0,lastWrite=0,alive=true;
       function save(){remember(card,source,season,episode,time,duration);lastWrite=Date.now();}
@@ -47,10 +56,10 @@
     });
   }
   function sources(card,season,episode){request('/api/sources',args(card),function(data){
-    var saved=state()[key(card)], entries=data.sources.filter(function(s){return s.supported;});
+    var saved=state()[key(card)], entries=data.sources;
     entries.sort(function(a,b){return Number(b.id===(saved||{}).source)-Number(a.id===(saved||{}).source);});
-    if(!entries.length){Lampa.Noty.show('Для этого тайтла нет поддерживаемых прямых источников');back();return;}
-    choose('AniPlay · источник',entries.map(function(s){return {title:safe(s.name),subtitle:s.id===(saved||{}).source?'Последний выбранный источник':'',id:s.id};}),function(s){play(card,s.id,season,episode);},function(){open(card);});
+    if(!entries.length){Lampa.Noty.show('Провайдеры пока не предоставили источников для этого тайтла');back();return;}
+    choose('AniPlay · источник',entries.map(function(s){return {title:safe(s.name),subtitle:(s.id===(saved||{}).source?'Последний выбранный · ':'')+(s.supported?'Плеер Lampa':'Внешний плеер · без синхронизации прогресса'),id:s.id};}),function(s){play(card,s.id,season,episode);},function(){open(card);});
   });}
   function seasons(card){request('/api/details',args(card),function(data){
     if(!data.seasons.length){Lampa.Noty.show('Список серий пока недоступен');back();return;}

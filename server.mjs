@@ -82,7 +82,12 @@ export function createApp({read=remote, apiKey=process.env.TMDB_API_KEY} = {}) {
         stream=parseCollapsPlayback(await read(frame.href),season,episode);
       } else if(isVeoveoUrl(source.iframeUrl)) stream=await resolveVeoveo(source.iframeUrl,{isSeries:item.type==='tv',season,episode},async (url,headers)=>({data:await read(url,headers)}));
       else if(item.type==='movie' && /\.(m3u8|mp4|webm)(?:[?#]|$)/i.test(source.iframeUrl))stream={hlsUrl:source.iframeUrl};
-      if(!stream?.hlsUrl)return json(422,{error:'Прямой поток этой серии недоступен. Выберите другой источник.'});
+      if(!stream?.hlsUrl) {
+        const frame = new URL(source.iframeUrl);
+        if (frame.protocol !== 'https:') return json(422,{error:'Источник недоступен'});
+        frame.searchParams.set('season', season); frame.searchParams.set('episode', episode);
+        return json(200,{iframeUrl:frame.href,source:source.key});
+      }
       return json(200,{url:stream.hlsUrl,source:source.key});
     } catch(error){return json(400,{error: error.message.includes('api_key')?'Ошибка каталога':error.message});}
   };
