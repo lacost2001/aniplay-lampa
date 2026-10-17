@@ -20,7 +20,12 @@
     xhr.onerror=function(){finish('Сервер недоступен. Проверьте адрес и подключение.');};
     xhr.ontimeout=function(){finish('Сервер не успел ответить. Если он спал, повторите попытку.');};xhr.send();
   }
-  function choose(title,items,onSelect,onBack){Lampa.Select.show({title:title,items:items,onSelect:function(item){Lampa.Select.close();onSelect(item);},onBack:onBack||back});}
+  function choose(title,items,onSelect,onBack){
+    var selecting=false;
+    Lampa.Select.show({title:title,items:items,nohide:true,onSelect:function(item){
+      selecting=true;Lampa.Select.close();onSelect(item);
+    },onBack:function(){if(!selecting)(onBack||back)();}});
+  }
   function args(card){return {id:card.id,type:key(card).split(':')[0]};}
   function state(){return Lampa.Storage.get('aniplay_lampa_history',{});}
   function remember(card,source,season,episode,time,duration){
@@ -42,7 +47,8 @@
         var box=$('<div></div>');
         $('<div></div>').text('Внешний плеер. Серии и озвучка переключаются внутри него; прогресс с Lampa не синхронизируется. Назад — закрыть.').css({fontSize:'0.8em',marginBottom:'0.5em'}).appendTo(box);
         $('<iframe></iframe>').attr({src:data.iframeUrl,allow:'autoplay; fullscreen; encrypted-media',allowfullscreen:'',referrerpolicy:'no-referrer',title:'AniPlay — внешний плеер'}).css({width:'100%',height:'70vh',border:0,background:'#000'}).appendTo(box);
-        function closeFrame(){box.find('iframe').attr('src','about:blank');Lampa.Modal.close();back();}
+        var frameClosed=false;
+        function closeFrame(){if(frameClosed)return;frameClosed=true;box.find('iframe').attr('src','about:blank');Lampa.Modal.close();back();}
         Lampa.Modal.open({title:'AniPlay · внешний плеер',html:box,size:'full',buttons:[{name:'Закрыть плеер',onSelect:closeFrame}],onBack:closeFrame});return;
       }
       var saved=state()[key(card)], prior=saved && saved.progress[season+':'+episode];
