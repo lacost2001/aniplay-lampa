@@ -14,11 +14,20 @@ export function positive(value) {
   if (!/^[1-9]\d{0,3}$/.test(String(value))) throw Error('Неверный номер сезона или серии');
   return Number(value);
 }
-export async function remote(url, headers = {}) {
+export async function remote(url, headers = {}, redirects = 0) {
   const u = new URL(url);
   if (u.protocol !== 'https:' || u.username || u.password || (u.port && u.port !== '443') ||
       !(['api.themoviedb.org','p2.ddbb.lol','a.ddbb.live'].includes(u.hostname) || isCollapsUrl(url) || isVeoveoUrl(url))) throw Error('Недопустимый источник');
-  const response = await fetch(u, { headers, redirect:'error', signal:AbortSignal.timeout(12000) });
+  const response = await fetch(u, { headers, redirect:'manual', signal:AbortSignal.timeout(12000) });
+  if ([301,302,303,307,308].includes(response.status)) {
+    if (redirects >= 3) throw Error('Слишком много перенаправлений');
+    const location = response.headers.get('location');
+    if (!location) throw Error('Некорректное перенаправление');
+    const target = new URL(location, u);
+    if (target.origin !== u.origin) throw Error('Перенаправление на другой сервер запрещено');
+    await response.body?.cancel();
+    return remote(target.href, headers, redirects + 1);
+  }
   if (!response.ok) throw Error(`Источник ответил ${response.status}`);
   const reader = response.body.getReader(); let size = 0; const chunks = [];
   try { while (true) { const {done,value}=await reader.read(); if(done)break; size+=value.length; if(size>4*1024*1024)throw Error('Ответ слишком большой'); chunks.push(Buffer.from(value)); } }
