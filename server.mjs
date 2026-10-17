@@ -76,17 +76,17 @@ export function createApp({read=remote, apiKey=process.env.TMDB_API_KEY} = {}) {
       const source=list.find(s=>s.key===url.searchParams.get('source'));
       if(!source)return json(404,{error:'Источник исчез. Обновите список.'});
       const season=positive(url.searchParams.get('season')||'1'),episode=positive(url.searchParams.get('episode')||'1');
-      let stream;
+      let stream, reason;
       if(isCollapsUrl(source.iframeUrl)) {
         const frame=new URL(source.iframeUrl);frame.searchParams.set('season',season);frame.searchParams.set('episode',episode);
         stream=parseCollapsPlayback(await read(frame.href),season,episode);
-      } else if(isVeoveoUrl(source.iframeUrl)) stream=await resolveVeoveo(source.iframeUrl,{isSeries:item.type==='tv',season,episode},async (url,headers)=>({data:await read(url,headers)}));
+      } else if(isVeoveoUrl(source.iframeUrl)) stream=await resolveVeoveo(source.iframeUrl,{isSeries:item.type==='tv',season,episode,onUnavailable:value=>{reason=value;}},async (url,headers)=>({data:await read(url,headers)}));
       else if(item.type==='movie' && /\.(m3u8|mp4|webm)(?:[?#]|$)/i.test(source.iframeUrl))stream={hlsUrl:source.iframeUrl};
       if(!stream?.hlsUrl) {
         const frame = new URL(source.iframeUrl);
         if (frame.protocol !== 'https:') return json(422,{error:'Источник недоступен'});
         frame.searchParams.set('season', season); frame.searchParams.set('episode', episode);
-        return json(200,{iframeUrl:frame.href,source:source.key});
+        return json(200,{iframeUrl:frame.href,source:source.key,reason});
       }
       return json(200,{url:stream.hlsUrl,source:source.key,notice:stream.notice});
     } catch(error){return json(400,{error: error.message.includes('api_key')?'Ошибка каталога':error.message});}
