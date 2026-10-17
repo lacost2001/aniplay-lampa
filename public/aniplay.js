@@ -35,6 +35,7 @@
   function play(card,source,season,episode){
     var query=args(card);query.source=source;query.season=season;query.episode=episode;
     request('/api/resolve',query,function(data){
+      if(data.notice)Lampa.Noty.show(data.notice);
       if(data.iframeUrl){
         var previous=state()[key(card)], progress=previous && previous.progress[season+':'+episode];
         remember(card,source,season,episode,progress?progress.time:0,progress?progress.duration:0);

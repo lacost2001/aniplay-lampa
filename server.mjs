@@ -88,7 +88,7 @@ export function createApp({read=remote, apiKey=process.env.TMDB_API_KEY} = {}) {
         frame.searchParams.set('season', season); frame.searchParams.set('episode', episode);
         return json(200,{iframeUrl:frame.href,source:source.key});
       }
-      return json(200,{url:stream.hlsUrl,source:source.key});
+      return json(200,{url:stream.hlsUrl,source:source.key,notice:stream.notice});
     } catch(error){return json(400,{error: error.message.includes('api_key')?'Ошибка каталога':error.message});}
   };
 }
