@@ -80,6 +80,14 @@
   }
   function history(){var records=state();var items=Object.keys(records).sort(function(a,b){return records[b].updatedAt-records[a].updatedAt;}).map(function(id){var r=records[id];return {title:safe(r.card.title||r.card.name),subtitle:id.indexOf('tv:')===0?'Сезон '+r.season+' · серия '+r.episode:'Фильм',card:r.card};});if(!items.length){Lampa.Noty.show('Откройте карточку, удерживайте ОК и выберите AniPlay');return;}choose('AniPlay · история',items,function(item){open(item.card);});}
   function init(){
+    Lampa.Listener.follow('full',function(e){
+      if(e.type!=='complite'||!e.data||!e.data.movie)return;
+      var body=e.body||(e.object&&e.object.activity&&e.object.activity.render());
+      if(!body)return;
+      var buttons=$(body).find('.full-start-new__buttons');
+      if(!buttons.length||buttons.find('.aniplay-watch').length)return;
+      $('<div class="full-start__button selector aniplay-watch"><span>Смотреть AniPlay</span></div>').on('hover:enter',function(){open(e.data.movie);}).prependTo(buttons);
+    });
     Lampa.SettingsApi.addComponent({component:'aniplay',name:'AniPlay'});
     Lampa.SettingsApi.addParam({component:'aniplay',param:{name:'aniplay_server',type:'input',default:defaultServer,placeholder:'https://your-service.onrender.com'},field:{name:'Адрес сервера AniPlay',description:'Сервер из репозитория aniplay-lampa'}});
     Lampa.Manifest.plugins={type:'video',version:'1.0.0',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};
