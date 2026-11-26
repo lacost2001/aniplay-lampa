@@ -67,7 +67,7 @@ export function createApp({read=remote, apiKey=process.env.TMDB_API_KEY} = {}) {
     const url=new URL(req.url,'http://localhost');
     const json=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));};
     try {
-      if(url.pathname==='/health')return json(200,{ok:true,version:'1.1.3',configured:!!apiKey});
+      if(url.pathname==='/health')return json(200,{ok:true,version:'1.1.4',configured:!!apiKey});
       if(url.pathname==='/aniplay.js'){res.setHeader('Content-Type','application/javascript; charset=utf-8');res.end(await readFile(new URL('./public/aniplay.js',import.meta.url)));return;}
       if(url.pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(await readFile(new URL('./public/index.html',import.meta.url)));return;}
       if(!['/api/details','/api/sources','/api/resolve'].includes(url.pathname))return json(404,{error:'Не найдено'});
