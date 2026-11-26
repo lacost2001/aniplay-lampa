@@ -156,7 +156,7 @@
     // New Lampa uses .full-start-new__buttons; older TV builds still use .full-start__buttons.
     var buttons=$(body).find('.full-start-new__buttons');if(!buttons.length)buttons=$(body).find('.full-start__buttons');
     if(!buttons.length||buttons.find('.aniplay-watch').length)return;
-    $('<div class="full-start__button selector aniplay-watch"><span>Смотреть AniPlay</span></div>').on('hover:enter',function(){open(movie);}).prependTo(buttons);
+    $('<div class="full-start__button selector aniplay-watch"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg><span>AniPlay</span></div>').on('hover:enter',function(){open(movie);}).prependTo(buttons);
     // Current Lampa lists source plugins from the hidden .buttons--container in its «Смотреть» menu.
     var sources=$(body).find('.buttons--container');
     if(sources.length&&!sources.find('.aniplay-source').length)$('<div class="full-start__button selector aniplay-source"><svg><use xlink:href="#sprite-play"></use></svg><span>AniPlay</span></div>').on('hover:enter',function(){open(movie);}).appendTo(sources);
