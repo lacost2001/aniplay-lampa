@@ -47,10 +47,65 @@
     var ordered=Object.keys(records).sort(function(a,b){return records[b].updatedAt-records[a].updatedAt;});
     ordered.slice(100).forEach(function(k){delete records[k];});Lampa.Storage.set('aniplay_lampa_history',records);
   }
+  // Veoveo blocks datacenter IPs (Render), so the TV resolves it with its own IP.
+  // Port of lib/veoveoData.js: reads only literal config, never runs provider JS.
+  var VEOVEO=/^https:\/\/(geralovod\.link|tazaromikaz\.link|player\.shortener2\.link|kurolesya\.link)(\/|$)/;
+  function xget(url,headers,done){
+    var xhr=new XMLHttpRequest(),finished=false;
+    function end(error,text){if(finished)return;finished=true;done(error,text);}
+    try{xhr.open('GET',url);for(var h in headers)if(headers.hasOwnProperty(h))xhr.setRequestHeader(h,headers[h]);}catch(e){end(e);return;}
+    xhr.timeout=20000;xhr.onload=function(){if(xhr.status===200)end(null,xhr.responseText);else end(Error('HTTP '+xhr.status));};
+    xhr.onerror=xhr.ontimeout=function(){end(Error('network'));};xhr.send();return xhr;
+  }
+  function param(url,name){var m=url.match(new RegExp('[?&]'+name+'=([^&#]*)'));return m?decodeURIComponent(m[1]):'';}
+  function veoveoPick(episodes,isSeries,season,episode,linkedId){
+    if(Object.prototype.toString.call(episodes)!=='[object Array]')return null;
+    var selected=null,i;
+    if(isSeries){for(i=0;i<episodes.length;i++){var e=episodes[i];if(e&&e.season&&String(e.season.order)===String(season)&&String(e.order)===String(episode)){selected=e;break;}}}
+    else if(episodes.length===1)selected=episodes[0];
+    if(!selected||selected.blocked)return null;
+    var playable=[],russian=[],all=selected.episodeVariants||[];
+    for(i=0;i<all.length;i++)if(all[i]&&VEOVEO.test(all[i].filepath||''))playable.push(all[i]);
+    for(i=0;i<playable.length;i++)if(/рус|дубл|многоголос|двухголос|закадров|russian|\brus\b/i.test(playable[i].title||'')&&!/укра|субтитр/i.test(playable[i].title||''))russian.push(playable[i]);
+    var list=russian.length?russian:playable,chosen=list[0];
+    if(linkedId)for(i=0;i<list.length;i++)if(String(list[i].id)===String(linkedId))chosen=list[i];
+    return chosen?chosen.filepath:null;
+  }
+  function veoveoOnTv(url,isSeries,season,episode,done){
+    xget(url,{},function(error,html){
+      if(error)return done(null);
+      var base=(html.match(/window\.ENV_BASE_URL\s*=\s*['"]([^'"]+)/)||[])[1]||'',movieId=param(url,'movie_id');
+      if(!VEOVEO.test(base)||!/\/balancer-api\/proxy\/playlists$/.test(base)||!/^\d+$/.test(movieId))return done(null);
+      var raw=(html.match(/window\.REQUEST_HEADERS\s*=\s*({[^;]+})/)||[])[1]||'',headers={},re=/['"]([^'"]+)['"]\s*:\s*['"]([^'"]*)['"]/g,m;
+      while((m=re.exec(raw)))if(m[1]==='DLE-API-TOKEN'||m[1]==='Iframe-Request-Id')headers[m[1]]=m[2];
+      if(!headers['DLE-API-TOKEN'])return done(null);
+      var q='domain='+encodeURIComponent(url)+'&locale=ru-RU&tz=UTC&referrer_host='+encodeURIComponent('http://localhost');
+      xget(base+'/catalog-api/contents/'+movieId+'/available?'+q,headers,function(error,text){
+        try{if(error||JSON.parse(text).available!==true)return done(null);}catch(e){return done(null);}
+        xget(base+'/catalog-api/episodes?content-id='+movieId,headers,function(error,text){
+          var stream=null;try{if(!error)stream=veoveoPick(JSON.parse(text),isSeries,season,episode,param(url,'episode_variant_id'));}catch(e){}
+          done(stream);
+        });
+      });
+    });
+  }
   function play(card,source,season,episode){
     var query=args(card);query.source=source;query.season=season;query.episode=episode;
     request('/api/resolve',query,function(data){
       if(data.notice)Lampa.Noty.show(data.notice);
+      if(data.iframeUrl&&VEOVEO.test(data.iframeUrl)){
+        var token=++generation;
+        Lampa.Modal.open({title:'AniPlay — поиск потока',html:Lampa.Template.get('modal_loading'),size:'small',onBack:function(){Lampa.Modal.close();back();}});
+        veoveoOnTv(data.iframeUrl,query.type==='tv',season,episode,function(stream){
+          if(token!==generation)return;Lampa.Modal.close();
+          if(stream){data.url=stream;delete data.iframeUrl;}
+          launch(data);
+        });
+        return;
+      }
+      launch(data);
+    });
+    function launch(data){
       if(data.iframeUrl){
         var previous=state()[key(card)], progress=previous && previous.progress[season+':'+episode];
         remember(card,source,season,episode,progress?progress.time:0,progress?progress.duration:0);
@@ -70,7 +125,7 @@
       function destroy(){if(!alive)return;save();alive=false;Lampa.PlayerVideo.listener.remove('timeupdate',tick);Lampa.PlayerVideo.listener.remove('canplay',ready);Lampa.PlayerVideo.listener.remove('ended',ended);Lampa.Player.listener.remove('destroy',destroy);}
       Lampa.Player.play({url:data.url,title:(card.title||card.name)+(query.type==='tv'?' · '+season+'×'+episode:''),movie:card});
       Lampa.PlayerVideo.listener.follow('timeupdate',tick);Lampa.PlayerVideo.listener.follow('canplay',ready);Lampa.PlayerVideo.listener.follow('ended',ended);Lampa.Player.listener.follow('destroy',destroy);save();
-    });
+    }
   }
   function sources(card,season,episode){request('/api/sources',args(card),function(data){
     var saved=state()[key(card)], entries=data.sources;
@@ -107,7 +162,7 @@
     });
     Lampa.SettingsApi.addComponent({component:'aniplay',name:'AniPlay'});
     Lampa.SettingsApi.addParam({component:'aniplay',param:{name:'aniplay_server',type:'input',default:defaultServer,placeholder:'https://your-service.onrender.com'},field:{name:'Адрес сервера AniPlay',description:'Сервер из репозитория aniplay-lampa'}});
-    Lampa.Manifest.plugins={type:'video',version:'1.1.0',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};
+    Lampa.Manifest.plugins={type:'video',version:'1.1.1',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};
     var button=$('<li class="menu__item selector"><div class="menu__ico">▶</div><div class="menu__text">AniPlay</div></li>');button.on('hover:enter',history);$('.menu .menu__list').eq(0).append(button);
   }
   if(window.appready)init();else Lampa.Listener.follow('app',function(e){if(e.type==='ready')init();});
