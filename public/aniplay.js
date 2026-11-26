@@ -123,10 +123,14 @@
       function ready(){Lampa.PlayerVideo.listener.remove('canplay',ready);if(time>0 && (!duration || time/duration<0.98))Lampa.PlayerVideo.to(time);}
       function ended(){time=duration;save();}
       function destroy(){if(!alive)return;save();alive=false;Lampa.PlayerVideo.listener.remove('timeupdate',tick);Lampa.PlayerVideo.listener.remove('canplay',ready);Lampa.PlayerVideo.listener.remove('ended',ended);Lampa.Player.listener.remove('destroy',destroy);}
-      Lampa.Player.play({url:data.url,title:(card.title||card.name)+(query.type==='tv'?' · '+season+'×'+episode:''),movie:card});
+      Lampa.Player.play({url:hlsHint(data.url),title:(card.title||card.name)+(query.type==='tv'?' · '+season+'×'+episode:''),movie:card});
       Lampa.PlayerVideo.listener.follow('timeupdate',tick);Lampa.PlayerVideo.listener.follow('canplay',ready);Lampa.PlayerVideo.listener.follow('ended',ended);Lampa.Player.listener.follow('destroy',destroy);save();
     }
   }
+  // Lampa uses hls.js only when the URL contains ".m3u8". Veoveo HLS links have no
+  // extension, so old TV engines (no native HLS) silently failed to play them.
+  // A fragment is never sent to the server, so the signed link stays intact.
+  function hlsHint(url){return /\.(m3u8|mp4|mkv|webm|mpd|avi|mov)(\?|#|$)/i.test(url)?url:url+'#.m3u8';}
   // Max quality from an HLS master playlist (RESOLUTION=WxH); '' when unknown (mp4, no data).
   function qualityLabel(width){return width>=3800?'4K':width>=2500?'2K':width>=1900?'1080p':width>=1260?'720p':width?'480p':'';}
   function hlsQuality(url,done){
@@ -209,9 +213,9 @@
       Lampa.SettingsApi.addComponent({component:'aniplay',name:'AniPlay'});
       Lampa.SettingsApi.addParam({component:'aniplay',param:{name:'aniplay_server',type:'input',values:'',default:defaultServer,placeholder:'https://your-service.onrender.com'},field:{name:'Адрес сервера AniPlay',description:'Сервер из репозитория aniplay-lampa'}});
     });
-    ok=step('context menu',function(){Lampa.Manifest.plugins={type:'video',version:'1.2.0',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};})||ok;
+    ok=step('context menu',function(){Lampa.Manifest.plugins={type:'video',version:'1.2.1',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};})||ok;
     ok=step('side menu',function(){var button=$('<li class="menu__item selector"><div class="menu__ico">▶</div><div class="menu__text">AniPlay</div></li>');button.on('hover:enter',history);$('.menu .menu__list').eq(0).append(button);})||ok;
-    step('notice',function(){Lampa.Noty.show(ok?'AniPlay 1.2.0 подключён':'AniPlay: эта версия Lampa не поддерживается');});
+    step('notice',function(){Lampa.Noty.show(ok?'AniPlay 1.2.1 подключён':'AniPlay: эта версия Lampa не поддерживается');});
   }
   if(window.appready)init();else Lampa.Listener.follow('app',function(e){if(e.type==='ready')init();});
 })();
