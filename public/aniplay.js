@@ -127,11 +127,49 @@
       Lampa.PlayerVideo.listener.follow('timeupdate',tick);Lampa.PlayerVideo.listener.follow('canplay',ready);Lampa.PlayerVideo.listener.follow('ended',ended);Lampa.Player.listener.follow('destroy',destroy);save();
     }
   }
+  // Max quality from an HLS master playlist (RESOLUTION=WxH); '' when unknown (mp4, no data).
+  function qualityLabel(width){return width>=3800?'4K':width>=2500?'2K':width>=1900?'1080p':width>=1260?'720p':width?'480p':'';}
+  function hlsQuality(url,done){
+    if(!/\.m3u8|content-router\/r\/\d/.test(url)||/\.mp4(\?|$)/.test(url))return done('');
+    xget(url,{},function(error,text){
+      var best=0,re=/RESOLUTION=(\d+)x(\d+)/g,m;
+      if(!error)while((m=re.exec(text)))best=Math.max(best,Number(m[1]));
+      done(qualityLabel(best));
+    });
+  }
+  var qualityCache={};
+  function probeQuality(card,source,season,episode,done){
+    var id=key(card)+'|'+source+'|'+season+':'+episode;
+    if(qualityCache.hasOwnProperty(id))return done(qualityCache[id]);
+    function finish(label){qualityCache[id]=label;done(label);}
+    var query=args(card),server=(Lampa.Storage.field('aniplay_server')||defaultServer).replace(/\/$/,'');
+    query.source=source;query.season=season;query.episode=episode;
+    var q=Object.keys(query).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(query[k]);}).join('&');
+    xget(server+'/api/resolve?'+q,{},function(error,text){
+      var data;try{data=JSON.parse(text);}catch(e){return finish('');}
+      if(error||!data)return finish('');
+      if(data.url)return hlsQuality(data.url,finish);
+      if(data.iframeUrl&&VEOVEO.test(data.iframeUrl))veoveoOnTv(data.iframeUrl,query.type==='tv',season,episode,function(stream){if(stream)hlsQuality(stream,finish);else finish('');});
+      else finish('');
+    });
+  }
   function sources(card,season,episode){request('/api/sources',args(card),function(data){
     var saved=state()[key(card)], entries=data.sources;
     entries.sort(function(a,b){return Number(b.id===(saved||{}).source)-Number(a.id===(saved||{}).source);});
     if(!entries.length){Lampa.Noty.show('Провайдеры пока не предоставили источников для этого тайтла');back();return;}
-    choose('AniPlay · источник',entries.map(function(s){return {title:safe(s.name),subtitle:(s.id===(saved||{}).source?'Последний выбранный · ':'')+(s.supported?'Плеер Lampa':'Внешний плеер · без синхронизации прогресса'),id:s.id};}),function(s){play(card,s.id,season,episode);},function(){open(card);});
+    // Only sources played by Lampa expose their streams; iframe players hide quality.
+    var probe=entries.filter(function(s){return s.supported;}).slice(0,4),quality={},left=probe.length,shown=false,token=++generation;
+    function show(){
+      if(shown||token!==generation)return;shown=true;Lampa.Modal.close();
+      choose('AniPlay · источник',entries.map(function(s){
+        var q=quality[s.id];
+        return {title:safe(s.name)+(q?' · '+q:''),subtitle:(s.id===(saved||{}).source?'Последний выбранный · ':'')+(s.supported?'Плеер Lampa'+(q?', до '+q:''):'Внешний плеер · качество выбирается в нём'),id:s.id};
+      }),function(s){play(card,s.id,season,episode);},function(){open(card);});
+    }
+    if(!left)return show();
+    Lampa.Modal.open({title:'AniPlay — проверка качества',html:Lampa.Template.get('modal_loading'),size:'small',onBack:function(){shown=true;Lampa.Modal.close();back();}});
+    setTimeout(show,12000);
+    probe.forEach(function(s){probeQuality(card,s.id,season,episode,function(label){quality[s.id]=label;if(--left===0)show();});});
   });}
   function seasons(card){request('/api/details',args(card),function(data){
     if(!data.seasons.length){Lampa.Noty.show('Список серий пока недоступен');back();return;}
@@ -171,9 +209,9 @@
       Lampa.SettingsApi.addComponent({component:'aniplay',name:'AniPlay'});
       Lampa.SettingsApi.addParam({component:'aniplay',param:{name:'aniplay_server',type:'input',values:'',default:defaultServer,placeholder:'https://your-service.onrender.com'},field:{name:'Адрес сервера AniPlay',description:'Сервер из репозитория aniplay-lampa'}});
     });
-    ok=step('context menu',function(){Lampa.Manifest.plugins={type:'video',version:'1.1.4',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};})||ok;
+    ok=step('context menu',function(){Lampa.Manifest.plugins={type:'video',version:'1.2.0',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};})||ok;
     ok=step('side menu',function(){var button=$('<li class="menu__item selector"><div class="menu__ico">▶</div><div class="menu__text">AniPlay</div></li>');button.on('hover:enter',history);$('.menu .menu__list').eq(0).append(button);})||ok;
-    step('notice',function(){Lampa.Noty.show(ok?'AniPlay 1.1.4 подключён':'AniPlay: эта версия Lampa не поддерживается');});
+    step('notice',function(){Lampa.Noty.show(ok?'AniPlay 1.2.0 подключён':'AniPlay: эта версия Lampa не поддерживается');});
   }
   if(window.appready)init();else Lampa.Listener.follow('app',function(e){if(e.type==='ready')init();});
 })();
