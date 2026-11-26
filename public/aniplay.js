@@ -2,23 +2,33 @@
   'use strict';
   if (window.aniplay_lampa_ready) return;
   window.aniplay_lampa_ready = true;
-  var script = document.currentScript;
-  var defaultServer = script && script.src ? script.src.replace(/\/aniplay\.js(?:\?.*)?$/, '') : '';
+  // Some TV builds of Lampa inject plugins without document.currentScript.
+  function pluginSrc(){
+    if(document.currentScript&&document.currentScript.src)return document.currentScript.src;
+    var list=document.getElementsByTagName('script');
+    for(var i=list.length-1;i>=0;i--)if(/\/aniplay\.js(?:\?|$)/.test(list[i].src||''))return list[i].src;
+    return '';
+  }
+  var defaultServer = pluginSrc().replace(/\/aniplay\.js(?:\?.*)?$/, '');
   var generation = 0, activeRequest;
   function safe(value) { return String(value || '').replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
   function key(card) { return (card.media_type === 'tv' || card.first_air_date || card.name ? 'tv' : 'movie') + ':' + card.id; }
   function back() { generation++; if(activeRequest)activeRequest.abort(); Lampa.Controller.toggle('content'); }
-  function request(route, args, done) {
+  function request(route, args, done, attempt) {
+    attempt=attempt||0;
     var server = Lampa.Storage.field('aniplay_server') || defaultServer;
     if(!/^https?:\/\/[^/]+(?:\/[^?#]*)?$/.test(server)){Lampa.Noty.show('Укажите адрес сервера AniPlay в настройках');return;}
     var token=++generation, xhr=new XMLHttpRequest(); activeRequest=xhr;
     var query=Object.keys(args).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(args[k]);}).join('&');
+    if(attempt)Lampa.Modal.close(); // the loading modal stays open (Back cancels) while waiting to retry
     Lampa.Modal.open({title:'AniPlay — загрузка',html:Lampa.Template.get('modal_loading'),size:'small',onBack:function(){Lampa.Modal.close();back();}});
     function finish(error,data){if(token!==generation)return;activeRequest=null;Lampa.Modal.close();if(error){Lampa.Noty.show(error);back();}else done(data);}
-    xhr.open('GET',server.replace(/\/$/,'')+route+'?'+query);xhr.timeout=45000;
+    // Free Render instances sleep: the first request can fail while the server wakes up.
+    function retry(error){if(token!==generation)return;if(attempt<2){activeRequest=null;Lampa.Noty.show('Сервер AniPlay просыпается, повтор…');setTimeout(function(){if(token===generation)request(route,args,done,attempt+1);},3000);}else finish(error);}
+    xhr.open('GET',server.replace(/\/$/,'')+route+'?'+query);xhr.timeout=60000;
     xhr.onload=function(){try{var data=JSON.parse(xhr.responseText);finish(xhr.status===200?null:(data.error||'Ошибка сервера'),data);}catch(e){finish('Сервер вернул неверный ответ');}};
-    xhr.onerror=function(){finish('Сервер недоступен. Проверьте адрес и подключение.');};
-    xhr.ontimeout=function(){finish('Сервер не успел ответить. Если он спал, повторите попытку.');};xhr.send();
+    xhr.onerror=function(){retry('Сервер недоступен. Проверьте адрес и подключение.');};
+    xhr.ontimeout=function(){retry('Сервер не успел ответить. Повторите попытку.');};xhr.send();
   }
   function choose(title,items,onSelect,onBack){
     var selecting=false;
@@ -90,13 +100,14 @@
       if(e.type!=='complite'||!e.data||!e.data.movie)return;
       var body=e.body||(e.object&&e.object.activity&&e.object.activity.render());
       if(!body)return;
-      var buttons=$(body).find('.full-start-new__buttons');
+      // New Lampa uses .full-start-new__buttons; older TV builds still use .full-start__buttons.
+      var buttons=$(body).find('.full-start-new__buttons');if(!buttons.length)buttons=$(body).find('.full-start__buttons');
       if(!buttons.length||buttons.find('.aniplay-watch').length)return;
       $('<div class="full-start__button selector aniplay-watch"><span>Смотреть AniPlay</span></div>').on('hover:enter',function(){open(e.data.movie);}).prependTo(buttons);
     });
     Lampa.SettingsApi.addComponent({component:'aniplay',name:'AniPlay'});
     Lampa.SettingsApi.addParam({component:'aniplay',param:{name:'aniplay_server',type:'input',default:defaultServer,placeholder:'https://your-service.onrender.com'},field:{name:'Адрес сервера AniPlay',description:'Сервер из репозитория aniplay-lampa'}});
-    Lampa.Manifest.plugins={type:'video',version:'1.0.0',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};
+    Lampa.Manifest.plugins={type:'video',version:'1.1.0',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};
     var button=$('<li class="menu__item selector"><div class="menu__ico">▶</div><div class="menu__text">AniPlay</div></li>');button.on('hover:enter',history);$('.menu .menu__list').eq(0).append(button);
   }
   if(window.appready)init();else Lampa.Listener.follow('app',function(e){if(e.type==='ready')init();});

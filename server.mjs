@@ -34,6 +34,8 @@ export async function remote(url, headers = {}, redirects = 0) {
   finally { await reader.cancel(); }
   return Buffer.concat(chunks).toString('utf8');
 }
+// Sources whose direct stream we can extract play in the Lampa player (works with a TV remote).
+export function playable(url,type){return isCollapsUrl(url)||isVeoveoUrl(url)||(type==='movie'&&/\.(m3u8|mp4|webm)(?:[?#]|$)/i.test(url));}
 export function createApp({read=remote, apiKey=process.env.TMDB_API_KEY} = {}) {
   const cache = new Map();
   async function tmdb(route) {
@@ -50,7 +52,9 @@ export function createApp({read=remote, apiKey=process.env.TMDB_API_KEY} = {}) {
       const data=JSON.parse(await read(`${base}/api/players?imdb=${encodeURIComponent(imdb)}`));
       return data.data||data.results||(Array.isArray(data)?data:[]);
     }));
-    const list=flattenPlayerProviders(results.flatMap(result=>result.status==='fulfilled'?result.value:[]));
+    // Vibix needs its browser SDK (vibix:// locator), which Lampa cannot host: list only https sources.
+    const list=flattenPlayerProviders(results.flatMap(result=>result.status==='fulfilled'?result.value:[])).filter(s=>/^https:\/\//.test(s.iframeUrl))
+      .sort((a,b)=>Number(playable(b.iframeUrl,item.type))-Number(playable(a.iframeUrl,item.type)));
     if(cache.size>=100)cache.delete(cache.keys().next().value);
     if(list.length)cache.set(item.key,{sources:list,expires:Date.now()+120000});
     return list;
@@ -58,11 +62,12 @@ export function createApp({read=remote, apiKey=process.env.TMDB_API_KEY} = {}) {
   return async function app(req,res) {
     res.setHeader('Access-Control-Allow-Origin','*'); res.setHeader('Cache-Control','no-store');
     if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
+    if(req.method==='HEAD'){res.writeHead(200);res.end();return;}
     if(req.method!=='GET'){res.writeHead(405);res.end();return;}
     const url=new URL(req.url,'http://localhost');
     const json=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));};
     try {
-      if(url.pathname==='/health')return json(200,{ok:true,version:'1.0.0',configured:!!apiKey});
+      if(url.pathname==='/health')return json(200,{ok:true,version:'1.1.0',configured:!!apiKey});
       if(url.pathname==='/aniplay.js'){res.setHeader('Content-Type','application/javascript; charset=utf-8');res.end(await readFile(new URL('./public/aniplay.js',import.meta.url)));return;}
       if(url.pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(await readFile(new URL('./public/index.html',import.meta.url)));return;}
       if(!['/api/details','/api/sources','/api/resolve'].includes(url.pathname))return json(404,{error:'Не найдено'});
@@ -72,7 +77,7 @@ export function createApp({read=remote, apiKey=process.env.TMDB_API_KEY} = {}) {
         return json(200,{title:detail.title||detail.name,seasons:(detail.seasons||[]).filter(s=>s.season_number>0).map(s=>({number:s.season_number,count:s.episode_count}))});
       }
       const list=await sources(item);
-      if(url.pathname==='/api/sources')return json(200,{sources:list.map(s=>({id:s.key,name:s.label,supported:isCollapsUrl(s.iframeUrl)||isVeoveoUrl(s.iframeUrl)||/\.(m3u8|mp4|webm)(?:[?#]|$)/i.test(s.iframeUrl)}))});
+      if(url.pathname==='/api/sources')return json(200,{sources:list.map(s=>({id:s.key,name:s.label,supported:playable(s.iframeUrl,item.type)}))});
       const source=list.find(s=>s.key===url.searchParams.get('source'));
       if(!source)return json(404,{error:'Источник исчез. Обновите список.'});
       const season=positive(url.searchParams.get('season')||'1'),episode=positive(url.searchParams.get('episode')||'1');
