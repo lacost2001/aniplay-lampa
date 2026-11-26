@@ -166,11 +166,11 @@
     });});
     step('settings',function(){
       Lampa.SettingsApi.addComponent({component:'aniplay',name:'AniPlay'});
-      Lampa.SettingsApi.addParam({component:'aniplay',param:{name:'aniplay_server',type:'input',default:defaultServer,placeholder:'https://your-service.onrender.com'},field:{name:'Адрес сервера AniPlay',description:'Сервер из репозитория aniplay-lampa'}});
+      Lampa.SettingsApi.addParam({component:'aniplay',param:{name:'aniplay_server',type:'input',values:'',default:defaultServer,placeholder:'https://your-service.onrender.com'},field:{name:'Адрес сервера AniPlay',description:'Сервер из репозитория aniplay-lampa'}});
     });
-    ok=step('context menu',function(){Lampa.Manifest.plugins={type:'video',version:'1.1.2',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};})||ok;
+    ok=step('context menu',function(){Lampa.Manifest.plugins={type:'video',version:'1.1.3',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};})||ok;
     ok=step('side menu',function(){var button=$('<li class="menu__item selector"><div class="menu__ico">▶</div><div class="menu__text">AniPlay</div></li>');button.on('hover:enter',history);$('.menu .menu__list').eq(0).append(button);})||ok;
-    step('notice',function(){Lampa.Noty.show(ok?'AniPlay 1.1.2 подключён':'AniPlay: эта версия Lampa не поддерживается');});
+    step('notice',function(){Lampa.Noty.show(ok?'AniPlay 1.1.3 подключён':'AniPlay: эта версия Lampa не поддерживается');});
   }
   if(window.appready)init();else Lampa.Listener.follow('app',function(e){if(e.type==='ready')init();});
 })();
