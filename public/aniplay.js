@@ -143,27 +143,34 @@
     });
   });}
   function open(card){
-    if(!card || !/^\d+$/.test(String(card.id)) || (card.source && card.source!=='tmdb')){Lampa.Noty.show('Откройте карточку из каталога TMDb');return;}
+    if(!card || !/^\d+$/.test(String(card.id)) || (card.source && card.source!=='tmdb' && card.source!=='cub')){Lampa.Noty.show('Откройте карточку из каталога TMDb');return;}
     var saved=state()[key(card)],items=[];
     if(saved)items.push({title:'Продолжить '+(key(card).indexOf('tv:')===0?saved.season+'×'+saved.episode:'просмотр'),action:'resume'});
     items.push({title:key(card).indexOf('tv:')===0?'Выбрать сезон и серию':'Выбрать источник',action:'choose'});
     choose('AniPlay · '+safe(card.title||card.name),items,function(item){if(item.action==='resume')play(card,saved.source,saved.season,saved.episode);else if(key(card).indexOf('tv:')===0)seasons(card);else sources(card,1,1);});
   }
   function history(){var records=state();var items=Object.keys(records).sort(function(a,b){return records[b].updatedAt-records[a].updatedAt;}).map(function(id){var r=records[id];return {title:safe(r.card.title||r.card.name),subtitle:id.indexOf('tv:')===0?'Сезон '+r.season+' · серия '+r.episode:'Фильм',card:r.card};});if(!items.length){Lampa.Noty.show('Откройте карточку, удерживайте ОК и выберите AniPlay');return;}choose('AniPlay · история',items,function(item){open(item.card);});}
+  // Each step is independent: an API missing in an older TV build of Lampa must not hide the others.
+  function step(name,fn){try{fn();return true;}catch(e){if(window.console)console.log('AniPlay: '+name+' failed',e);return false;}}
+  function addWatchButton(body,movie){
+    // New Lampa uses .full-start-new__buttons; older TV builds still use .full-start__buttons.
+    var buttons=$(body).find('.full-start-new__buttons');if(!buttons.length)buttons=$(body).find('.full-start__buttons');
+    if(!buttons.length||buttons.find('.aniplay-watch').length)return;
+    $('<div class="full-start__button selector aniplay-watch"><span>Смотреть AniPlay</span></div>').on('hover:enter',function(){open(movie);}).prependTo(buttons);
+  }
   function init(){
-    Lampa.Listener.follow('full',function(e){
+    var ok=step('card button',function(){Lampa.Listener.follow('full',function(e){
       if(e.type!=='complite'||!e.data||!e.data.movie)return;
       var body=e.body||(e.object&&e.object.activity&&e.object.activity.render());
-      if(!body)return;
-      // New Lampa uses .full-start-new__buttons; older TV builds still use .full-start__buttons.
-      var buttons=$(body).find('.full-start-new__buttons');if(!buttons.length)buttons=$(body).find('.full-start__buttons');
-      if(!buttons.length||buttons.find('.aniplay-watch').length)return;
-      $('<div class="full-start__button selector aniplay-watch"><span>Смотреть AniPlay</span></div>').on('hover:enter',function(){open(e.data.movie);}).prependTo(buttons);
+      if(body)addWatchButton(body,e.data.movie);
+    });});
+    step('settings',function(){
+      Lampa.SettingsApi.addComponent({component:'aniplay',name:'AniPlay'});
+      Lampa.SettingsApi.addParam({component:'aniplay',param:{name:'aniplay_server',type:'input',default:defaultServer,placeholder:'https://your-service.onrender.com'},field:{name:'Адрес сервера AniPlay',description:'Сервер из репозитория aniplay-lampa'}});
     });
-    Lampa.SettingsApi.addComponent({component:'aniplay',name:'AniPlay'});
-    Lampa.SettingsApi.addParam({component:'aniplay',param:{name:'aniplay_server',type:'input',default:defaultServer,placeholder:'https://your-service.onrender.com'},field:{name:'Адрес сервера AniPlay',description:'Сервер из репозитория aniplay-lampa'}});
-    Lampa.Manifest.plugins={type:'video',version:'1.1.1',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};
-    var button=$('<li class="menu__item selector"><div class="menu__ico">▶</div><div class="menu__text">AniPlay</div></li>');button.on('hover:enter',history);$('.menu .menu__list').eq(0).append(button);
+    ok=step('context menu',function(){Lampa.Manifest.plugins={type:'video',version:'1.1.2',name:'AniPlay',description:'Источники и история AniPlay для Lampa',onContextMenu:function(){return {name:'Смотреть через AniPlay',description:'Выбор источника, сезона и серии'};},onContextLauch:open};})||ok;
+    ok=step('side menu',function(){var button=$('<li class="menu__item selector"><div class="menu__ico">▶</div><div class="menu__text">AniPlay</div></li>');button.on('hover:enter',history);$('.menu .menu__list').eq(0).append(button);})||ok;
+    step('notice',function(){Lampa.Noty.show(ok?'AniPlay 1.1.2 подключён':'AniPlay: эта версия Lampa не поддерживается');});
   }
   if(window.appready)init();else Lampa.Listener.follow('app',function(e){if(e.type==='ready')init();});
 })();
