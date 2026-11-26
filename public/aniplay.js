@@ -157,6 +157,9 @@
     var buttons=$(body).find('.full-start-new__buttons');if(!buttons.length)buttons=$(body).find('.full-start__buttons');
     if(!buttons.length||buttons.find('.aniplay-watch').length)return;
     $('<div class="full-start__button selector aniplay-watch"><span>Смотреть AniPlay</span></div>').on('hover:enter',function(){open(movie);}).prependTo(buttons);
+    // Current Lampa lists source plugins from the hidden .buttons--container in its «Смотреть» menu.
+    var sources=$(body).find('.buttons--container');
+    if(sources.length&&!sources.find('.aniplay-source').length)$('<div class="full-start__button selector aniplay-source"><svg><use xlink:href="#sprite-play"></use></svg><span>AniPlay</span></div>').on('hover:enter',function(){open(movie);}).appendTo(sources);
   }
   function init(){
     var ok=step('card button',function(){Lampa.Listener.follow('full',function(e){
